@@ -223,7 +223,9 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used):
               "- Forecasts are statistical projections, not price advice.", ""]
 
     os.makedirs(config.OUT_DIR, exist_ok=True)
-    with open(config.REPORT_PATH, "w") as f:
+    # Force UTF-8: the report contains non-Latin-1 glyphs (⚠️, ², ≤, →) that the
+    # Windows default cp1252 codec cannot encode.
+    with open(config.REPORT_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     log.info("Report written to %s", config.REPORT_PATH)
 
