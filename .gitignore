@@ -7,3 +7,7 @@ venv/
 
 # generated extended (clean+realized) series
 data/clean/*_extended.csv
+
+# generated realization-tracking artifacts (regenerated on demand)
+outputs/plots/*_realization.png
+outputs/realization_tracking.csv
