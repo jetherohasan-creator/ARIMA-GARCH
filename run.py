@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 import config
+import plotting
 import data_loader
 import eda
 import risk_band
@@ -108,8 +109,7 @@ def plot_forecast(y: pd.Series, fc, label: str, path: str):
     ax.legend(loc="upper left", fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
+    plotting.safe_savefig(fig, path, dpi=110)
 
 
 def save_forecast_csv(fc, path: str):
@@ -146,8 +146,7 @@ def plot_riskband(y, fc, fband, label, z, path, lookback=104):
     ax.legend(loc="upper left", fontsize=7.5, ncol=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
+    plotting.safe_savefig(fig, path, dpi=110)
 
 
 # --------------------------------------------------------------------------- #

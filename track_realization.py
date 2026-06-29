@@ -46,6 +46,7 @@ import numpy as np
 import pandas as pd
 
 import config
+import plotting
 import data_loader
 from backtest import mae, mape, rmse, smape
 
@@ -210,8 +211,7 @@ def plot_realization(key: str, clean, real: pd.Series, lookback: int = 78):
     fig.tight_layout()
     os.makedirs(config.PLOT_DIR, exist_ok=True)
     path = os.path.join(config.PLOT_DIR, f"{key}_realization.png")
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
+    plotting.safe_savefig(fig, path, dpi=110)
     return path
 
 

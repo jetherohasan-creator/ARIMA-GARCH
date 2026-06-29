@@ -23,6 +23,7 @@ from statsmodels.tsa.seasonal import STL
 from statsmodels.tsa.stattools import acf, adfuller, kpss
 
 import config
+import plotting
 
 log = logging.getLogger("eda")
 
@@ -123,6 +124,5 @@ def plot_diagnostics(series: pd.Series, key: str, label: str,
     fig.suptitle(f"EDA diagnostics — {label}")
     fig.tight_layout()
     path = os.path.join(config.PLOT_DIR, f"{key}_eda.png")
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
+    plotting.safe_savefig(fig, path, dpi=110)
     return path
