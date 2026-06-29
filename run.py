@@ -26,6 +26,7 @@ import pandas as pd
 import config
 import data_loader
 import eda
+import risk_band
 from models import arima_garch, linreg, naive, sarima, shrink_toward_naive
 
 warnings.filterwarnings("ignore")
@@ -76,6 +77,9 @@ def parse_args():
     p.add_argument("--backtest-horizon", type=int, default=13,
                    help="test horizon (weeks) for the main backtest table "
                         "(default 13). Use 1-2 for near-term accuracy (<5%% MAPE)")
+    p.add_argument("--risk-z", type=float, default=1.0,
+                   help="sigma multiple for the Ceiling/Mid/Floor business risk "
+                        "band (default 1.0, as in the reference notebook)")
     return p.parse_args()
 
 
@@ -112,6 +116,38 @@ def save_forecast_csv(fc, path: str):
     df = pd.DataFrame({"forecast": fc.mean, "lower": fc.lower, "upper": fc.upper})
     df.index.name = "date"
     df.to_csv(path)
+
+
+def plot_riskband(y, fc, fband, label, z, path, lookback=104):
+    """Business chart: actual + in-sample band + forecast Ceiling/Mid/Floor."""
+    iband = risk_band.insample_band(fc, y, z)
+    fig, ax = plt.subplots(figsize=(13, 5.5))
+    hist = y.dropna().iloc[-lookback:]
+    ax.plot(hist.index, hist.values, color="#1E40AF", lw=1.3, label="Aktual",
+            zorder=4)
+    if not iband.empty:
+        ib = iband.loc[iband.index >= hist.index[0]]
+        ax.fill_between(ib.index, ib["floor"], ib["ceiling"], color="#045AA7",
+                        alpha=0.10, label=f"Risk band in-sample (±{z:g}σ)")
+        ax.plot(ib.index, ib["mid"], color="#03447F", lw=0.8, ls="--",
+                alpha=0.7, label="Mid (fitted)")
+    ax.plot(fband.index, fband["mid"], color="#B91C1C", lw=1.6, label="Mid forecast")
+    ax.fill_between(fband.index, fband["floor"], fband["ceiling"],
+                    color="#EF4444", alpha=0.15,
+                    label=f"Forecast band (±{z:g}σ)")
+    ax.plot(fband.index, fband["ceiling"], color="#065F46", lw=0.9, ls=":",
+            label="Ceiling")
+    ax.plot(fband.index, fband["floor"], color="#7C2D12", lw=0.9, ls=":",
+            label="Floor")
+    ax.axvline(hist.index[-1], color="gray", lw=1.0, ls="--", alpha=0.6)
+    ax.set_title(f"{label} — Risk Band Ceiling/Mid/Floor (Z={z:g}σ)\n"
+                 f"{fc.spec}", fontsize=10)
+    ax.set_ylabel("USD/Ton")
+    ax.legend(loc="upper left", fontsize=7.5, ncol=2)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
 
 
 # --------------------------------------------------------------------------- #
@@ -162,7 +198,7 @@ def model_product(key: str, res: data_loader.CleanResult, args,
 # Report
 # --------------------------------------------------------------------------- #
 def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used,
-                 horizon_df=None):
+                 horizon_df=None, business_df=None):
     lines = ["# Fertilizer Global Price Forecast — Report", ""]
     lines.append(f"_Generated for horizon = **{args.horizon} weeks** "
                  f"(~{args.horizon/4.345:.1f} months). SARIMA freq = "
@@ -252,6 +288,31 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used,
                 "upper": round(float(fc.upper.iloc[-1]), 1),
             })
     lines.append(pd.DataFrame(spec_rows).to_markdown(index=False))
+
+    # Business risk band & commercial signals
+    if business_df is not None and not business_df.empty:
+        lines += ["", f"## 4b. Risk band & commercial signals (ARIMA-GARCH, "
+                  f"Z={args.risk_z:g}σ)", "",
+                  business_df.drop(columns=["_signal"], errors="ignore")
+                  .to_markdown(index=False), "",
+                  "**Decision rules** (per the commercial framing):", "",
+                  "- **Ceiling** — if the market price approaches/exceeds it: "
+                  "*waspada* → consider hedging or set a ceiling price (HET).",
+                  "- **Mid** — model's best estimate; benchmark for running "
+                  "contracts.",
+                  "- **Floor** — if price approaches it: buying opportunity / "
+                  "good time to negotiate cheap contracts.", "",
+                  "Current zone per product:", ""]
+        for _, row in business_df.iterrows():
+            lines.append(f"- **{row['product']}** — last {row['harga_terakhir']}"
+                         f" USD/Ton → **{row['zona']}**: {row['_signal']}.")
+        lines += ["",
+                  "_`insample_MAPE%` is the in-sample 1-step fit error "
+                  "(goodness-of-fit, comparable to the reference notebook's "
+                  "~3%); it is NOT forecast skill — see section 2b/3 for honest "
+                  "out-of-sample accuracy. The band widens with GARCH "
+                  "conditional volatility (vs a constant-width band)._", ""]
+
     lines += ["", "## 5. Assumptions & notes", "",
               "- Weekly grid anchored on the modal weekday (Thursday).",
               "- ARIMA-GARCH models log-returns (ARX mean + GARCH variance, "
@@ -260,6 +321,8 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used,
               "for future regressors (random-walk assumption).",
               "- SARIMA `weekly` mode is non-seasonal for tractability; use "
               "`--sarima-freq=monthly` for the seasonal (m=12) variant.",
+              "- Risk band Ceiling/Mid/Floor at Z·σ (`--risk-z`, default 1) is a "
+              "commercial decision tool; the band widens with GARCH volatility.",
               "- Forecasts are statistical projections, not price advice.", ""]
 
     os.makedirs(config.OUT_DIR, exist_ok=True)
@@ -343,6 +406,39 @@ def main():
         log.info("Modelling %s ...", r.label)
         all_forecasts[k] = model_product(k, r, args, materials_for(k))
 
+    # 3b. Business risk band (Ceiling/Mid/Floor) + commercial signal
+    business_rows = []
+    for k, r in clean.items():
+        fc = all_forecasts[k]["ARIMA-GARCH"]
+        fband = risk_band.forecast_band(fc, args.risk_z)
+        fband.index.name = "date"
+        fband.round(2).to_csv(os.path.join(config.FORECAST_DIR,
+                                           f"{k}_riskband.csv"))
+        plot_riskband(r.target, fc, fband, r.label, args.risk_z,
+                      os.path.join(config.PLOT_DIR, f"{k}_riskband.png"))
+        sig = risk_band.current_signal(r.target, fc, args.risk_z)
+        is_mape = risk_band.insample_mape(r.target, fc.fitted)
+
+        def at(h):  # band value at horizon h weeks (1-based)
+            i = min(h, len(fband)) - 1
+            return fband.iloc[i]
+        business_rows.append({
+            "product": r.label,
+            "harga_terakhir": round(sig["actual"], 1),
+            "zona": sig["zone"],
+            "posisi%": round(sig["position"] * 100, 0)
+            if sig["position"] == sig["position"] else None,
+            "insample_MAPE%": round(is_mape, 2),
+            "floor_+13w": round(at(13)["floor"], 0),
+            "mid_+13w": round(at(13)["mid"], 0),
+            "ceiling_+13w": round(at(13)["ceiling"], 0),
+            "_signal": sig["message"],
+        })
+    business_df = pd.DataFrame(business_rows)
+    print("\n=== RISK BAND & SINYAL KOMERSIAL (ARIMA-GARCH, Z="
+          f"{args.risk_z:g}σ) ===")
+    print(business_df.drop(columns=["_signal"]).to_string(index=False))
+
     # 4. Backtest
     metrics_df = None
     horizon_df = None
@@ -366,7 +462,8 @@ def main():
 
     # 5. Report
     write_report(clean, {"clean": clean_summ, "stat": stat_df},
-                 all_forecasts, metrics_df, args, proxy_used, horizon_df)
+                 all_forecasts, metrics_df, args, proxy_used, horizon_df,
+                 business_df)
 
     print("\nDone. See outputs/ for forecasts, plots, metrics and report.md")
 

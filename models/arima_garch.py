@@ -170,7 +170,11 @@ def fit_forecast(y: pd.Series, horizon: int, alpha: float = 0.05,
 
     diag = {"ar_order": p, "vol": vk["vol"], "nu": nu, "arch_lm_p": float(arch_p)
             if np.isfinite(arch_p) else np.nan, "aic": float(res.aic),
-            "persistence": persistence, "igarch_var_capped": diag_cap}
+            "persistence": persistence, "igarch_var_capped": diag_cap,
+            # Raw material for business risk bands (ceiling/mid/floor at any Z):
+            #   forecast per-step log-return std, and in-sample conditional vol.
+            "logret_se": se.copy(),
+            "insample_sigma_logret": (res.conditional_volatility / SCALE).copy()}
     try:
         std_resid = (res.resid / res.conditional_volatility).dropna()
         lb = acorr_ljungbox(std_resid, lags=[10], return_df=True)

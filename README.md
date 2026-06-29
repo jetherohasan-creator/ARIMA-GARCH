@@ -110,6 +110,27 @@ with `dayfirst=True`, drops off-grid/duplicate rows, interpolates short gaps
 (≤2 wk) and reindexes onto a regular weekly grid. See
 [`data_loader.py`](data_loader.py) for the full rationale.
 
+## Commercial risk band (Ceiling / Mid / Floor)
+
+A decision-support layer (integrated into `run.py`) on top of the ARIMA-GARCH
+forecast, for all products:
+
+| Band | Meaning | Action |
+|---|---|---|
+| **Ceiling** = Mid + Z·σ | upper risk bound | price nears/exceeds → *waspada*: hedge or set a ceiling price (HET) |
+| **Mid** | best estimate | benchmark for running contracts |
+| **Floor** = max(Mid − Z·σ, 0) | lower risk bound | price nears → buying opportunity / negotiate cheap |
+
+`Z` is set with `--risk-z` (default `1.0`). Unlike a constant-width band, this
+band **widens with GARCH conditional volatility**. Each run produces:
+
+* `outputs/forecasts/<product>_riskband.csv` — date, floor, mid, ceiling,
+* `outputs/plots/<product>_riskband.png` — actual + in-sample band + forecast band,
+* a **commercial signal** per product (BELI / NORMAL / WASPADA — where the latest
+  price sits in its volatility envelope) and the **in-sample MAPE** (the
+  goodness-of-fit number, ~3%, comparable to a fitted-values metric) in the
+  report's section 4b — shown alongside the honest out-of-sample accuracy.
+
 ## Realization tracking (forecast vs actual)
 
 Log the reference prices **as they are published each week** and score the
