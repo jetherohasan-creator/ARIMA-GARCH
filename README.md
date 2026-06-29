@@ -77,6 +77,30 @@ with `dayfirst=True`, drops off-grid/duplicate rows, interpolates short gaps
 (≤2 wk) and reindexes onto a regular weekly grid. See
 [`data_loader.py`](data_loader.py) for the full rationale.
 
+## Realization tracking (forecast vs actual)
+
+Log the reference prices **as they are published each week** and score the
+forecasts against reality with [`track_realization.py`](track_realization.py):
+
+```bash
+python track_realization.py --init                       # create input templates
+python track_realization.py --add urea 2026-06-11 651.2  # log one realized price
+python track_realization.py --add urea 11/06/2026 651.2  # dd/mm/yyyy also accepted
+python track_realization.py                              # score forecasts vs realized
+python track_realization.py --refit                      # roll forward & re-forecast
+```
+
+* Realized prices live in `data/realizations/<product>.csv` (columns
+  `date,actual`); edit them by hand or via `--add`. Dates are snapped to the
+  weekly grid.
+* Plain run → `outputs/realization_tracking.csv` (RMSE/MAE/MAPE/sMAPE +
+  interval hit-rate of each method on the realized window) and
+  `outputs/plots/<product>_realization.png` (history + realized dots + each
+  method's forecast and band), and prints which method is tracking best.
+* `--refit` merges workbook + realized data into `data/clean/<key>_extended.csv`
+  and re-runs `run.py --use-extended`, so the next forecast starts from the
+  latest realized week.
+
 ## Outputs
 
 ```

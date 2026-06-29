@@ -65,6 +65,9 @@ def parse_args():
                    help="subset of products (default: all available)")
     p.add_argument("--no-backtest", action="store_true",
                    help="skip walk-forward backtest (faster)")
+    p.add_argument("--use-extended", action="store_true",
+                   help="forecast from data/clean/<key>_extended.csv "
+                        "(workbook + realized actuals) instead of the workbook")
     return p.parse_args()
 
 
@@ -248,8 +251,12 @@ def main():
 
     log.info("Products: %s | horizon=%d", requested, args.horizon)
 
-    # 1. Clean
-    clean = data_loader.load_all(requested)
+    # 1. Clean (or load extended clean+realized series)
+    if args.use_extended:
+        log.info("Using extended (clean + realized) series.")
+        clean = data_loader.load_extended(requested)
+    else:
+        clean = data_loader.load_all(requested)
     clean_summ = data_loader.summarize(clean)
     print("\n=== CLEANING SUMMARY ===")
     print(clean_summ.to_string(index=False))

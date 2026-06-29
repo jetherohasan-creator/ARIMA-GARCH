@@ -230,6 +230,44 @@ def load_all(keys: list[str], xlsx_path: str | None = None) -> dict[str, CleanRe
     return results
 
 
+def load_from_clean_csv(key: str, path: str) -> CleanResult:
+    """Build a CleanResult from a pre-cleaned CSV (e.g. an *_extended.csv that
+    already merges workbook + realized actuals). Used by ``run.py --use-extended``.
+    """
+    df = pd.read_csv(path, parse_dates=["date"]).set_index("date").sort_index()
+    df = df.asfreq(config.WEEK_FREQ)
+    target = df[key] if key in df.columns else df.iloc[:, 0]
+    support = df.drop(columns=[c for c in [key] if c in df.columns],
+                      errors="ignore")
+    prod = config.PRODUCTS[key]
+    return CleanResult(
+        key=key, label=prod.label, target=target.rename(key), support=support,
+        modal_weekday=int(pd.Series(df.index.weekday).mode().iloc[0]),
+        n_raw=len(df), n_offgrid_dropped=0, n_duplicates_dropped=0,
+        n_parse_failed=0, n_interpolated=0,
+        n_remaining_gaps=int(target.isna().sum()),
+        grid_start=df.index.min(), grid_end=df.index.max(),
+    )
+
+
+def load_extended(keys: list[str]) -> dict[str, CleanResult]:
+    """Load extended (clean+realized) series written by track_realization."""
+    import os
+    results = {}
+    for k in keys:
+        path = os.path.join(config.CLEAN_DIR, f"{k}_extended.csv")
+        if not os.path.exists(path):
+            log.warning("[%s] no extended CSV (%s) — falling back to workbook",
+                        k, path)
+            results[k] = load_product(config.PRODUCTS[k])
+        else:
+            results[k] = load_from_clean_csv(k, path)
+            log.info("[%s] loaded extended series -> %s (%d obs, end %s)",
+                     k, path, len(results[k].target),
+                     results[k].grid_end.date())
+    return results
+
+
 def summarize(results: dict[str, CleanResult]) -> pd.DataFrame:
     """Tabular cleaning report for quick verification / the markdown report."""
     rows = []
