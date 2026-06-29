@@ -260,12 +260,21 @@ def main():
 
     # Scoring + plots
     all_rows = []
+    recorded_no_overlap = []  # has realizations, but none overlap the forecast
     for k in keys:
         real = load_realizations(k)
         if real.empty:
             log.info("[%s] no realized data yet (skip scoring)", k)
         else:
-            all_rows += score_against_realized(k, real)
+            rows = score_against_realized(k, real)
+            if rows:
+                all_rows += rows
+            else:
+                recorded_no_overlap.append((k, len(real)))
+                log.info("[%s] %d realized week(s) recorded but none fall inside "
+                         "the current forecast horizon — already folded into "
+                         "history by --refit; add NEW forecast weeks to resume "
+                         "scoring", k, len(real))
         plot_realization(k, clean, real)
 
     if all_rows:
@@ -281,6 +290,15 @@ def main():
                   f"RMSE={b['RMSE']:.2f}  MAPE={b['MAPE']:.2f}%  "
                   f"(n={int(b['n_realized'])})")
         print(f"\nSaved -> {TRACK_CSV} and outputs/plots/<product>_realization.png")
+    elif recorded_no_overlap:
+        print("\nRealized data IS recorded, but after --refit your realized "
+              "weeks are now part of history and the forecast restarts after "
+              "them, so there is nothing new to score yet:")
+        for k, n in recorded_no_overlap:
+            print(f"  - {config.PRODUCTS[k].label}: {n} realized week(s) folded "
+                  f"into history; forecast now starts at the new level.")
+        print("Add prices for the NEW forecast weeks (as published) to resume "
+              "tracking. The updated forecast is in outputs/forecasts/.")
     else:
         print("\nNo realized observations recorded yet. Use:")
         print("  python track_realization.py --init")
