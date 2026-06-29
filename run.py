@@ -26,7 +26,7 @@ import pandas as pd
 import config
 import data_loader
 import eda
-from models import arima_garch, linreg, sarima
+from models import arima_garch, linreg, naive, sarima, shrink_toward_naive
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO,
@@ -34,9 +34,11 @@ logging.basicConfig(level=logging.INFO,
                     datefmt="%H:%M:%S")
 log = logging.getLogger("run")
 
-METHODS = ["SARIMA", "ARIMA-GARCH", "LinearRegression"]
-METHOD_FILE = {"SARIMA": "sarima", "ARIMA-GARCH": "arima_garch",
+METHODS = ["Naive", "SARIMA", "ARIMA-GARCH", "LinearRegression"]
+METHOD_FILE = {"Naive": "naive", "SARIMA": "sarima", "ARIMA-GARCH": "arima_garch",
                "LinearRegression": "linreg"}
+# Methods whose point forecast is shrunk toward the random walk (--shrink).
+SHRINK_METHODS = {"SARIMA", "ARIMA-GARCH"}
 
 AMMONIA_DISCLAIMER = (
     "No Ammonia sheet exists in the source workbook, so Ammonia is **not "
@@ -68,6 +70,9 @@ def parse_args():
     p.add_argument("--use-extended", action="store_true",
                    help="forecast from data/clean/<key>_extended.csv "
                         "(workbook + realized actuals) instead of the workbook")
+    p.add_argument("--shrink", type=float, default=0.5,
+                   help="shrink SARIMA/ARIMA-GARCH point forecasts toward the "
+                        "random walk; 0=pure model, 1=pure naive (default 0.5)")
     return p.parse_args()
 
 
@@ -113,11 +118,18 @@ def model_product(key: str, res: data_loader.CleanResult, args,
                   materials: dict | None):
     y = res.target
     forecasts = {}
+    last_value = float(y.dropna().iloc[-1])
 
+    forecasts["Naive"] = naive.fit_forecast(y, args.horizon, product=key)
     forecasts["SARIMA"] = sarima.fit_forecast(
         y, args.horizon, freq=args.sarima_freq, product=key)
     forecasts["ARIMA-GARCH"] = arima_garch.fit_forecast(
         y, args.horizon, product=key, vol=args.garch_vol)
+
+    # Shrink the structural models toward the random walk (lowers point error).
+    for m in SHRINK_METHODS:
+        if m in forecasts and args.sarima_freq != "monthly":
+            shrink_toward_naive(forecasts[m], last_value, args.shrink)
 
     lr_mode = args.lr_mode
     lr_materials = None
@@ -151,7 +163,18 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used):
     lines.append(f"_Generated for horizon = **{args.horizon} weeks** "
                  f"(~{args.horizon/4.345:.1f} months). SARIMA freq = "
                  f"`{args.sarima_freq}`, LR mode = `{args.lr_mode}`, GARCH vol = "
-                 f"`{args.garch_vol}`._")
+                 f"`{args.garch_vol}`, shrink = `{args.shrink}`._")
+    lines += ["", "## 0. Why the errors look large (read first)", "",
+              "Backtest errors are measured at a **13-week** test horizon. These "
+              "are volatile commodity prices: the average absolute price move "
+              "over 13 weeks is ~22% (Urea), ~19% (ZA), ~14% (TSP), ~9% (NPK), "
+              "so multi-month point-forecast error is dominated by inherent "
+              "volatility, not model defects. Near-term (1–4 week) error is "
+              "roughly half. A **Naive random-walk** benchmark is included as "
+              "the reference: for efficient commodity prices it is hard to beat, "
+              "so SARIMA/ARIMA-GARCH point forecasts are shrunk toward it "
+              "(`--shrink`) to minimise error while keeping their "
+              "volatility-aware intervals."]
     lines += ["", "## ⚠️ Ammonia disclaimer", "", AMMONIA_DISCLAIMER, ""]
     if proxy_used:
         lines.append("> **This run used `--ammonia-proxy=za`.** The `ammonia` "

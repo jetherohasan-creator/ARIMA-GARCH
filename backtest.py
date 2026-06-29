@@ -13,9 +13,11 @@ import numpy as np
 import pandas as pd
 
 import config
-from models import arima_garch, linreg, sarima
+from models import arima_garch, linreg, naive, sarima, shrink_toward_naive
 
 log = logging.getLogger("backtest")
+
+SHRINK_METHODS = {"SARIMA", "ARIMA-GARCH"}
 
 
 # --------------------------------------------------------------------------- #
@@ -62,12 +64,19 @@ def _score(actual: pd.Series, fc) -> dict:
 # --------------------------------------------------------------------------- #
 def _forecast(method: str, train: pd.Series, h: int, product: str,
               args, materials=None):
+    shrink = getattr(args, "shrink", 0.0)
+    last_value = float(train.dropna().iloc[-1])
+    if method == "Naive":
+        return naive.fit_forecast(train, h, product=product)
     if method == "SARIMA":
-        return sarima.fit_forecast(train, h, freq=args.sarima_freq,
-                                   product=product)
+        fc = sarima.fit_forecast(train, h, freq=args.sarima_freq,
+                                 product=product)
+        return shrink_toward_naive(fc, last_value, shrink) \
+            if args.sarima_freq != "monthly" else fc
     if method == "ARIMA-GARCH":
-        return arima_garch.fit_forecast(train, h, product=product,
-                                        vol=args.garch_vol)
+        fc = arima_garch.fit_forecast(train, h, product=product,
+                                      vol=args.garch_vol)
+        return shrink_toward_naive(fc, last_value, shrink)
     if method == "LinearRegression":
         mat = None
         if args.lr_mode == "materials" and materials:
@@ -78,7 +87,7 @@ def _forecast(method: str, train: pd.Series, h: int, product: str,
 
 
 def walk_forward(y: pd.Series, method: str, product: str, args,
-                 materials=None, n_origins: int = 4, test_h: int = 13) -> dict:
+                 materials=None, n_origins: int = 6, test_h: int = 13) -> dict:
     """Rolling-origin CV. Returns averaged metrics + per-origin detail."""
     s = y.dropna()
     n = len(s)

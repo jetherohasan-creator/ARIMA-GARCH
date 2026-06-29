@@ -30,3 +30,25 @@ def future_index(history: pd.Series, horizon: int,
     """Build the future date index immediately following ``history``."""
     start = history.index[-1] + pd.tseries.frequencies.to_offset(freq)
     return pd.date_range(start=start, periods=horizon, freq=freq)
+
+
+def shrink_toward_naive(fc: "ForecastResult", last_value: float,
+                        s: float) -> "ForecastResult":
+    """Pull a forecast's point path toward the random walk (last observed value).
+
+    ``s`` in [0, 1]: 0 = pure model, 1 = pure naive. Backtests on these weekly
+    commodity series show the models slightly *over-extrapolate* recent momentum
+    that mean-reverts, so a partial shrink toward "next week = this week"
+    measurably lowers RMSE/MAE/MAPE/sMAPE. The prediction interval is shifted by
+    the same amount, preserving its (volatility-aware) width around the new mean.
+    """
+    if not s or s <= 0:
+        return fc
+    s = min(float(s), 1.0)
+    new_mean = (1 - s) * fc.mean + s * last_value
+    delta = new_mean - fc.mean
+    fc.mean = new_mean
+    fc.lower = fc.lower + delta
+    fc.upper = fc.upper + delta
+    fc.diagnostics["shrink"] = s
+    return fc

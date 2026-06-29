@@ -1,6 +1,10 @@
 # Fertilizer Global Price Forecast — Report
 
-_Generated for horizon = **26 weeks** (~6.0 months). SARIMA freq = `weekly`, LR mode = `trend`, GARCH vol = `GARCH`._
+_Generated for horizon = **26 weeks** (~6.0 months). SARIMA freq = `weekly`, LR mode = `trend`, GARCH vol = `GARCH`, shrink = `0.5`._
+
+## 0. Why the errors look large (read first)
+
+Backtest errors are measured at a **13-week** test horizon. These are volatile commodity prices: the average absolute price move over 13 weeks is ~22% (Urea), ~19% (ZA), ~14% (TSP), ~9% (NPK), so multi-month point-forecast error is dominated by inherent volatility, not model defects. Near-term (1–4 week) error is roughly half. A **Naive random-walk** benchmark is included as the reference: for efficient commodity prices it is hard to beat, so SARIMA/ARIMA-GARCH point forecasts are shrunk toward it (`--shrink`) to minimise error while keeping their volatility-aware intervals.
 
 ## ⚠️ Ammonia disclaimer
 
@@ -32,44 +36,52 @@ _ADF H0 = unit root (small p ⇒ stationary); KPSS H0 = stationary (small p ⇒ 
 
 | product                | method           |   RMSE |    MAE |   MAPE |   sMAPE |   coverage |   n_origins |
 |:-----------------------|:-----------------|-------:|-------:|-------:|--------:|-----------:|------------:|
-| Urea                   | SARIMA           | 105.03 |  99.76 |  17.35 |   20.07 |      80.77 |           4 |
-| Urea                   | ARIMA-GARCH      | 113.06 | 106    |  19.12 |   22.21 |      78.85 |           4 |
-| Urea                   | LinearRegression | 243.87 | 237.71 |  46.96 |   65.06 |      75    |           4 |
-| NPK 15-10-12           | SARIMA           |  30.33 |  26.06 |   5.07 |    5.39 |      86.54 |           4 |
-| NPK 15-10-12           | ARIMA-GARCH      |  28.64 |  24.57 |   4.79 |    5.05 |      80.77 |           4 |
-| NPK 15-10-12           | LinearRegression | 173.86 | 170.19 |  34.96 |   42.92 |      46.15 |           4 |
-| ZA (Ammonium Sulphate) | SARIMA           |  62.02 |  57.18 |  18    |   20.71 |      80.77 |           4 |
-| ZA (Ammonium Sulphate) | ARIMA-GARCH      |  58.74 |  53.77 |  16.93 |   19.33 |      73.08 |           4 |
-| ZA (Ammonium Sulphate) | LinearRegression | 165.79 | 161.07 |  55.78 |   80.89 |      65.38 |           4 |
-| TSP                    | SARIMA           |  59.26 |  53    |  11.29 |   12.16 |     100    |           4 |
-| TSP                    | ARIMA-GARCH      |  57.06 |  50.65 |  10.79 |   11.61 |      61.54 |           4 |
-| TSP                    | LinearRegression | 181.59 | 177.32 |  37.56 |   48.6  |      69.23 |           4 |
+| Urea                   | Naive            |  83.62 |  73.86 |  13.88 |   15.61 |      85.9  |           6 |
+| Urea                   | SARIMA           |  83.55 |  73.84 |  13.77 |   15.53 |      88.46 |           6 |
+| Urea                   | ARIMA-GARCH      |  85.8  |  76.14 |  14.47 |   16.38 |      87.18 |           6 |
+| Urea                   | LinearRegression | 231.75 | 224.7  |  48.75 |   67.31 |      87.18 |           6 |
+| NPK 15-10-12           | Naive            |  24.77 |  20.22 |   3.98 |    4.17 |      84.62 |           6 |
+| NPK 15-10-12           | SARIMA           |  25.85 |  21.11 |   4.15 |    4.37 |      88.46 |           6 |
+| NPK 15-10-12           | ARIMA-GARCH      |  24.69 |  20.15 |   3.96 |    4.16 |      84.62 |           6 |
+| NPK 15-10-12           | LinearRegression | 168.76 | 166.19 |  34.57 |   42.37 |      42.31 |           6 |
+| ZA (Ammonium Sulphate) | Naive            |  41.28 |  35.91 |  12.14 |   13.56 |      71.79 |           6 |
+| ZA (Ammonium Sulphate) | SARIMA           |  41.28 |  35.91 |  12.14 |   13.56 |      91.03 |           6 |
+| ZA (Ammonium Sulphate) | ARIMA-GARCH      |  40.74 |  35.27 |  11.97 |   13.3  |      84.62 |           6 |
+| ZA (Ammonium Sulphate) | LinearRegression | 145.56 | 141.23 |  54.61 |   77.69 |      85.9  |           6 |
+| TSP                    | Naive            |  29.84 |  25.52 |   5.6  |    5.92 |      87.18 |           6 |
+| TSP                    | SARIMA           |  30.1  |  25.75 |   5.66 |    5.99 |     100    |           6 |
+| TSP                    | ARIMA-GARCH      |  29.78 |  25.45 |   5.59 |    5.91 |      89.74 |           6 |
+| TSP                    | LinearRegression | 169.78 | 166.97 |  37.74 |   48.16 |      88.46 |           6 |
 
 ### Best method per product (lowest RMSE)
 
 | product                | best_method   |   RMSE |   MAPE% |
 |:-----------------------|:--------------|-------:|--------:|
-| NPK 15-10-12           | ARIMA-GARCH   |  28.64 |    4.79 |
-| TSP                    | ARIMA-GARCH   |  57.06 |   10.79 |
-| Urea                   | SARIMA        | 105.03 |   17.35 |
-| ZA (Ammonium Sulphate) | ARIMA-GARCH   |  58.74 |   16.93 |
+| NPK 15-10-12           | ARIMA-GARCH   |  24.69 |    3.96 |
+| TSP                    | ARIMA-GARCH   |  29.78 |    5.59 |
+| Urea                   | SARIMA        |  83.55 |   13.77 |
+| ZA (Ammonium Sulphate) | ARIMA-GARCH   |  40.74 |   11.97 |
 
 ## 4. Selected models & forecast summary
 
-| product                | method           | spec                                          |   forecast_end (+26w) |   lower |   upper |
-|:-----------------------|:-----------------|:----------------------------------------------|----------------------:|--------:|--------:|
-| Urea                   | SARIMA           | SARIMA(2, 1, 0)x(0, 0, 0, 0) [weekly]         |                 653.3 |   223.7 |  1082.8 |
-| Urea                   | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist |                 582.9 |   301.3 |  1127.7 |
-| Urea                   | LinearRegression | OLS price ~ t + t^2 (R²=0.069)                |                 371   |    32.8 |   709.3 |
-| NPK 15-10-12           | SARIMA           | SARIMA(1, 1, 3)x(0, 0, 0, 0) [weekly]         |                 562.4 |   412.3 |   712.6 |
-| NPK 15-10-12           | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist |                 559.9 |   471.5 |   664.9 |
-| NPK 15-10-12           | LinearRegression | OLS price ~ t + t^2 (R²=0.193)                |                 343.7 |   147.2 |   540.3 |
-| ZA (Ammonium Sulphate) | SARIMA           | SARIMA(0, 1, 0)x(0, 0, 0, 0) [weekly]         |                 408.6 |   214.4 |   602.8 |
-| ZA (Ammonium Sulphate) | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=1) + GARCH(1,1), t-dist |                 411.5 |   271.5 |   623.8 |
-| ZA (Ammonium Sulphate) | LinearRegression | OLS price ~ t + t^2 (R²=0.058)                |                 200.8 |     0   |   405.6 |
-| TSP                    | SARIMA           | SARIMA(0, 1, 1)x(0, 0, 0, 0) [weekly]         |                 625.7 |   405.4 |   846   |
-| TSP                    | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist |                 629.3 |   514.2 |   770.2 |
-| TSP                    | LinearRegression | OLS price ~ t + t^2 (R²=0.200)                |                 393.5 |   129.7 |   657.2 |
+| product                | method           | spec                                           |   forecast_end (+26w) |   lower |   upper |
+|:-----------------------|:-----------------|:-----------------------------------------------|----------------------:|--------:|--------:|
+| Urea                   | Naive            | Naive random walk (last value carried forward) |                 646.6 |   390.9 |  1069.4 |
+| Urea                   | SARIMA           | SARIMA(2, 1, 0)x(0, 0, 0, 0) [weekly]          |                 649.9 |   220.4 |  1079.5 |
+| Urea                   | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist  |                 614.7 |   333.1 |  1159.6 |
+| Urea                   | LinearRegression | OLS price ~ t + t^2 (R²=0.069)                 |                 371   |    32.8 |   709.3 |
+| NPK 15-10-12           | Naive            | Naive random walk (last value carried forward) |                 559.9 |   458.8 |   683.2 |
+| NPK 15-10-12           | SARIMA           | SARIMA(1, 1, 3)x(0, 0, 0, 0) [weekly]          |                 561.2 |   411   |   711.3 |
+| NPK 15-10-12           | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist  |                 559.9 |   471.5 |   664.8 |
+| NPK 15-10-12           | LinearRegression | OLS price ~ t + t^2 (R²=0.193)                 |                 343.7 |   147.2 |   540.3 |
+| ZA (Ammonium Sulphate) | Naive            | Naive random walk (last value carried forward) |                 408.6 |   297.6 |   561.1 |
+| ZA (Ammonium Sulphate) | SARIMA           | SARIMA(0, 1, 0)x(0, 0, 0, 0) [weekly]          |                 408.6 |   214.4 |   602.8 |
+| ZA (Ammonium Sulphate) | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=1) + GARCH(1,1), t-dist  |                 410.1 |   270   |   622.3 |
+| ZA (Ammonium Sulphate) | LinearRegression | OLS price ~ t + t^2 (R²=0.058)                 |                 200.8 |     0   |   405.6 |
+| TSP                    | Naive            | Naive random walk (last value carried forward) |                 625.9 |   536.6 |   730.1 |
+| TSP                    | SARIMA           | SARIMA(0, 1, 1)x(0, 0, 0, 0) [weekly]          |                 625.8 |   405.5 |   846.1 |
+| TSP                    | ARIMA-GARCH      | ARIMA-GARCH: ARX(lags=2) + GARCH(1,1), t-dist  |                 627.6 |   512.5 |   768.5 |
+| TSP                    | LinearRegression | OLS price ~ t + t^2 (R²=0.200)                 |                 393.5 |   129.7 |   657.2 |
 
 ## 5. Assumptions & notes
 

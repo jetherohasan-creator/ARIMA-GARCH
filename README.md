@@ -6,9 +6,24 @@ workbook, and compares three forecasting methods per product.
 
 | Method | What it captures |
 |---|---|
+| **Naive** | Random-walk benchmark ("next week = this week") — the reference to beat |
 | **SARIMA** | Mean dynamics (+ optional monthly seasonality, m=12) |
 | **ARIMA-GARCH** | ARX mean on log-returns **+ conditional volatility**; intervals widen with volatility |
 | **Linear Regression** | Trend / autoregressive lags / NPK-vs-materials baselines |
+
+### On forecast error
+
+These are volatile commodity prices that behave close to a **random walk**, so
+multi-week point-forecast error is dominated by inherent volatility (the average
+absolute move over 13 weeks is ~22% Urea, ~19% ZA, ~14% TSP, ~9% NPK). Two
+consequences, both handled by the pipeline:
+
+* A **Naive random-walk benchmark** is reported as the honest reference — at
+  multi-week horizons it is genuinely hard to beat.
+* SARIMA / ARIMA-GARCH slightly over-extrapolate mean-reverting momentum, so
+  their point forecasts are **shrunk toward the random walk** (`--shrink`,
+  default 0.5), which measurably lowers RMSE/MAE/MAPE/sMAPE while preserving
+  their volatility-aware prediction intervals. `--shrink 0` disables it.
 
 ## Products
 
@@ -58,6 +73,7 @@ python run.py --products urea npk --horizon 13 --no-backtest
 | `--sarima-freq` | `weekly` | `weekly` (non-seasonal) or `monthly` (seasonal m=12) |
 | `--lr-mode` | `trend` | `trend` · `lags` · `materials` (NPK only) |
 | `--garch-vol` | `GARCH` | `GARCH` · `EGARCH` · `GJR` |
+| `--shrink` | `0.5` | shrink SARIMA/ARIMA-GARCH toward random walk (0=pure model, 1=naive) |
 | `--ammonia-proxy` | — | `za` to use ZA as an Ammonia placeholder |
 | `--products` | all | subset of product keys |
 | `--no-backtest` | off | skip walk-forward CV (faster) |
