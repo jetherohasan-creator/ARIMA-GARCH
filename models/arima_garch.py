@@ -135,7 +135,21 @@ def fit_forecast(y: pd.Series, horizon: int, alpha: float = 0.05,
     last_logp = float(logp.iloc[-1])
     cum_mean = np.cumsum(mean_ret)
     cum_var = np.cumsum(var_ret)
-    se = np.sqrt(cum_var)
+
+    # Robustness guard. On some (esp. short backtest) training windows the ARX
+    # mean fits a near-unit-root AR with a non-zero constant, so its multi-step
+    # mean forecast diverges and exp() overflows to +/-inf. Library-version
+    # differences can flip a window into this regime. We therefore (a) replace
+    # non-finite values and (b) clamp the cumulative log-drift and the interval
+    # half-width to economically sane bounds, so the point forecast can move at
+    # most ~4x and the band at most ~8x over the horizon.
+    drift_cap = np.log(4.0)
+    se_cap = np.log(8.0)
+    cum_mean = np.clip(np.nan_to_num(cum_mean, nan=0.0,
+                                     posinf=drift_cap, neginf=-drift_cap),
+                       -drift_cap, drift_cap)
+    cum_var = np.nan_to_num(cum_var, nan=0.0, posinf=se_cap ** 2)
+    se = np.clip(np.sqrt(cum_var), 0.0, se_cap)
 
     # Use a Student-t quantile (fat tails) but floor the d.o.f. at 5: the raw
     # MLE nu ~ 2 has near-infinite variance and over-inflates the band.

@@ -45,7 +45,9 @@ def _score(actual: pd.Series, fc) -> dict:
     f = fc.mean.reindex(actual.index).values
     lo = fc.lower.reindex(actual.index).values
     hi = fc.upper.reindex(actual.index).values
-    m = ~np.isnan(f) & ~np.isnan(a)
+    # isfinite (not just ~isnan) so a divergent inf forecast is excluded, not
+    # propagated into an inf metric.
+    m = np.isfinite(f) & np.isfinite(a)
     if m.sum() == 0:
         return {}
     a, f, lo, hi = a[m], f[m], lo[m], hi[m]
