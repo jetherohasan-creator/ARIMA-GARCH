@@ -86,6 +86,7 @@ forecasts against reality with [`track_realization.py`](track_realization.py):
 python track_realization.py --init                       # create input templates
 python track_realization.py --add urea 2026-06-11 651.2  # log one realized price
 python track_realization.py --add urea 11/06/2026 651.2  # dd/mm/yyyy also accepted
+python track_realization.py --add urea 2026-06-11 651 2026-06-18 648  # many at once
 python track_realization.py                              # score forecasts vs realized
 python track_realization.py --refit                      # roll forward & re-forecast
 ```

@@ -1,0 +1,4 @@
+product,key,method,n_realized,RMSE,MAE,MAPE,sMAPE,interval_hit%
+Urea,urea,SARIMA,3,188.44,187.06,40.42,33.49,0.0
+Urea,urea,ARIMA-GARCH,3,171.54,170.26,36.79,30.96,0.0
+Urea,urea,LinearRegression,3,69.77,65.95,13.93,15.07,100.0

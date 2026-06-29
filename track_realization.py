@@ -220,8 +220,10 @@ def main():
     p = argparse.ArgumentParser(description="Track realized prices vs forecasts")
     p.add_argument("--init", action="store_true",
                    help="create empty realization templates")
-    p.add_argument("--add", nargs=3, metavar=("PRODUCT", "DATE", "VALUE"),
-                   help="append one realized observation")
+    p.add_argument("--add", nargs="+",
+                   metavar="PRODUCT DATE VALUE [DATE VALUE ...]",
+                   help="append realized observation(s) for one product; "
+                        "accepts multiple DATE VALUE pairs")
     p.add_argument("--refit", action="store_true",
                    help="re-run forecasting on the extended (clean+realized) series")
     p.add_argument("--products", nargs="+", default=None)
@@ -235,10 +237,14 @@ def main():
         return
 
     if args.add:
-        prod, date_str, value = args.add
+        prod, rest = args.add[0], args.add[1:]
         if prod not in config.PRODUCTS:
             sys.exit(f"Unknown product '{prod}'. Choose from {list(config.PRODUCTS)}")
-        add_realization(prod, date_str, float(value), clean)
+        if len(rest) < 2 or len(rest) % 2 != 0:
+            sys.exit("--add expects: PRODUCT DATE VALUE [DATE VALUE ...] "
+                     "(one product, then DATE VALUE pairs)")
+        for i in range(0, len(rest), 2):
+            add_realization(prod, rest[i], float(rest[i + 1]), clean)
         # fall through so the user immediately sees updated tracking
 
     if args.refit:
