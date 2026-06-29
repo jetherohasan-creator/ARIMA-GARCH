@@ -127,13 +127,34 @@ def walk_forward(y: pd.Series, method: str, product: str, args,
 def run_all(clean: dict, methods: list[str], args,
             materials_lookup=None) -> pd.DataFrame:
     """Backtest every (product, method) pair into a tidy metrics frame."""
+    test_h = getattr(args, "backtest_horizon", 13)
     rows = []
     for key, res in clean.items():
         y = res.target
         materials = materials_lookup(key) if materials_lookup else None
         for method in methods:
-            log.info("Backtesting %s / %s ...", key, method)
-            m = walk_forward(y, method, key, args, materials=materials)
+            log.info("Backtesting %s / %s (h=%d) ...", key, method, test_h)
+            m = walk_forward(y, method, key, args, materials=materials,
+                             test_h=test_h)
             rows.append({"product": res.label, "key": key, "method": method,
                          **m})
+    return pd.DataFrame(rows)
+
+
+def horizon_profile(clean, method, args, materials_lookup=None,
+                    horizons=(1, 4, 13), n_origins=8) -> pd.DataFrame:
+    """MAPE of one method at several forecast horizons (1, 4, 13 weeks).
+
+    Makes explicit that near-term forecasts are far more accurate than long-term
+    ones — the honest way to report sub-5% accuracy on volatile series.
+    """
+    rows = []
+    for key, res in clean.items():
+        materials = materials_lookup(key) if materials_lookup else None
+        row = {"product": res.label, "key": key}
+        for h in horizons:
+            m = walk_forward(res.target, method, key, args, materials=materials,
+                             n_origins=n_origins, test_h=h)
+            row[f"MAPE_h{h}w"] = round(m.get("MAPE", float("nan")), 2)
+        rows.append(row)
     return pd.DataFrame(rows)

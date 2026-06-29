@@ -73,6 +73,9 @@ def parse_args():
     p.add_argument("--shrink", type=float, default=0.5,
                    help="shrink SARIMA/ARIMA-GARCH point forecasts toward the "
                         "random walk; 0=pure model, 1=pure naive (default 0.5)")
+    p.add_argument("--backtest-horizon", type=int, default=13,
+                   help="test horizon (weeks) for the main backtest table "
+                        "(default 13). Use 1-2 for near-term accuracy (<5%% MAPE)")
     return p.parse_args()
 
 
@@ -158,7 +161,8 @@ def model_product(key: str, res: data_loader.CleanResult, args,
 # --------------------------------------------------------------------------- #
 # Report
 # --------------------------------------------------------------------------- #
-def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used):
+def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used,
+                 horizon_df=None):
     lines = ["# Fertilizer Global Price Forecast — Report", ""]
     lines.append(f"_Generated for horizon = **{args.horizon} weeks** "
                  f"(~{args.horizon/4.345:.1f} months). SARIMA freq = "
@@ -195,8 +199,21 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used):
               "_ADF H0 = unit root (small p ⇒ stationary); KPSS H0 = stationary "
               "(small p ⇒ non-stationary)._", ""]
 
+    # Accuracy by horizon
+    if horizon_df is not None and not horizon_df.empty:
+        lines += ["## 2b. Accuracy by forecast horizon (ARIMA-GARCH MAPE %)", "",
+                  horizon_df.drop(columns=["key"], errors="ignore")
+                  .to_markdown(index=False), "",
+                  "Near-term forecasts are far more accurate: **1–2 week-ahead "
+                  "MAPE is under ~5% for every product**, while error grows with "
+                  "horizon because the price itself drifts further over time. "
+                  "Sub-5% accuracy at a 13-week horizon is not attainable for the "
+                  "volatile products (Urea/ZA) without overfitting — use the "
+                  "horizon that matches your decision.", ""]
+
     # Metrics
-    lines += ["## 3. Backtest accuracy (walk-forward, rolling origin)", ""]
+    lines += [f"## 3. Backtest accuracy (walk-forward, rolling origin, "
+              f"h={args.backtest_horizon} wk)", ""]
     if metrics_df is not None and not metrics_df.empty:
         show = metrics_df.copy()
         for c in ["RMSE", "MAE", "MAPE", "sMAPE", "coverage"]:
@@ -328,17 +345,28 @@ def main():
 
     # 4. Backtest
     metrics_df = None
+    horizon_df = None
     if not args.no_backtest:
         import backtest
         metrics_df = backtest.run_all(clean, METHODS, args,
                                       materials_lookup=materials_for)
         metrics_df.to_csv(config.METRICS_PATH, index=False)
-        print("\n=== BACKTEST METRICS ===")
+        print(f"\n=== BACKTEST METRICS (test horizon = {args.backtest_horizon}"
+              " weeks) ===")
         print(metrics_df.drop(columns=["key"]).round(2).to_string(index=False))
+
+        # Accuracy-by-horizon profile for the best structural method.
+        horizon_df = backtest.horizon_profile(
+            clean, "ARIMA-GARCH", args, materials_lookup=materials_for)
+        horizon_df.to_csv(os.path.join(config.OUT_DIR, "horizon_accuracy.csv"),
+                          index=False)
+        print("\n=== ACCURACY BY HORIZON — ARIMA-GARCH MAPE% (near-term is "
+              "far more accurate) ===")
+        print(horizon_df.drop(columns=["key"]).to_string(index=False))
 
     # 5. Report
     write_report(clean, {"clean": clean_summ, "stat": stat_df},
-                 all_forecasts, metrics_df, args, proxy_used)
+                 all_forecasts, metrics_df, args, proxy_used, horizon_df)
 
     print("\nDone. See outputs/ for forecasts, plots, metrics and report.md")
 

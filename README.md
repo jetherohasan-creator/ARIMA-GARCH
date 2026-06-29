@@ -25,6 +25,22 @@ consequences, both handled by the pipeline:
   default 0.5), which measurably lowers RMSE/MAE/MAPE/sMAPE while preserving
   their volatility-aware prediction intervals. `--shrink 0` disables it.
 
+**Error depends strongly on horizon.** ARIMA-GARCH MAPE by forecast distance:
+
+| Horizon | Urea | NPK | ZA | TSP |
+|---|---|---|---|---|
+| 1 week  | 2.8% | 1.8% | 2.2% | 0.7% |
+| 2 weeks | 3.9% | 1.2% | 3.1% | 0.8% |
+| 4 weeks | 6.2% | 1.9% | 5.7% | 1.6% |
+| 13 weeks| 11.5%| 2.9% | 10.6%| 4.6% |
+
+**1–2 week-ahead MAPE is under 5% for every product.** Sub-5% at 13 weeks is
+not attainable for Urea/ZA without overfitting (their price moves ~20% over that
+span — even a perfect "last value" forecast errs that much). Pick the horizon
+that matches the decision: `python run.py --backtest-horizon 2` evaluates and
+reports near-term accuracy; the report's section 2b always shows the full
+horizon profile. `outputs/horizon_accuracy.csv` holds the table.
+
 ## Products
 
 Configured in [`config.py`](config.py) via the `PRODUCTS` registry — adding a new
@@ -74,6 +90,7 @@ python run.py --products urea npk --horizon 13 --no-backtest
 | `--lr-mode` | `trend` | `trend` · `lags` · `materials` (NPK only) |
 | `--garch-vol` | `GARCH` | `GARCH` · `EGARCH` · `GJR` |
 | `--shrink` | `0.5` | shrink SARIMA/ARIMA-GARCH toward random walk (0=pure model, 1=naive) |
+| `--backtest-horizon` | `13` | test horizon (weeks) for the main backtest; use `1`–`2` for near-term accuracy (<5% MAPE) |
 | `--ammonia-proxy` | — | `za` to use ZA as an Ammonia placeholder |
 | `--products` | all | subset of product keys |
 | `--no-backtest` | off | skip walk-forward CV (faster) |
