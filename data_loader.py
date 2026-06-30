@@ -220,7 +220,8 @@ def load_all(keys: list[str], xlsx_path: str | None = None) -> dict[str, CleanRe
         res = load_product(config.PRODUCTS[k], xlsx_path)
         out = pd.concat([res.target, res.support], axis=1)
         path = os.path.join(config.CLEAN_DIR, f"{k}.csv")
-        out.to_csv(path)
+        import plotting
+        plotting.safe_to_csv(out, path)
         log.info(
             "[%s] cleaned -> %s | %d obs, %d valid, range %s..%s",
             k, path, len(res.target), int(res.target.notna().sum()),

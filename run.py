@@ -115,7 +115,7 @@ def plot_forecast(y: pd.Series, fc, label: str, path: str):
 def save_forecast_csv(fc, path: str):
     df = pd.DataFrame({"forecast": fc.mean, "lower": fc.lower, "upper": fc.upper})
     df.index.name = "date"
-    df.to_csv(path)
+    plotting.safe_to_csv(df, path)
 
 
 def plot_riskband(y, fc, fband, label, z, path, lookback=104):
@@ -326,10 +326,20 @@ def write_report(clean, eda_summ, all_forecasts, metrics_df, args, proxy_used,
 
     os.makedirs(config.OUT_DIR, exist_ok=True)
     # Force UTF-8: the report contains non-Latin-1 glyphs (⚠️, ², ≤, →) that the
-    # Windows default cp1252 codec cannot encode.
-    with open(config.REPORT_PATH, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    log.info("Report written to %s", config.REPORT_PATH)
+    # Windows default cp1252 codec cannot encode. Retry through OneDrive locks.
+    import time as _t
+    for _attempt in range(5):
+        try:
+            with open(config.REPORT_PATH, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            log.info("Report written to %s", config.REPORT_PATH)
+            break
+        except (OSError, PermissionError) as e:
+            if _attempt < 4:
+                _t.sleep(0.8)
+            else:
+                log.error("FAILED to write report (%s) — likely OneDrive lock; "
+                          "pause OneDrive sync and re-run.", e)
 
 
 # --------------------------------------------------------------------------- #
@@ -411,8 +421,8 @@ def main():
         fc = all_forecasts[k]["ARIMA-GARCH"]
         fband = risk_band.forecast_band(fc, args.risk_z)
         fband.index.name = "date"
-        fband.round(2).to_csv(os.path.join(config.FORECAST_DIR,
-                                           f"{k}_riskband.csv"))
+        plotting.safe_to_csv(fband.round(2), os.path.join(
+            config.FORECAST_DIR, f"{k}_riskband.csv"))
         plot_riskband(r.target, fc, fband, r.label, args.risk_z,
                       os.path.join(config.PLOT_DIR, f"{k}_riskband.png"))
         sig = risk_band.current_signal(r.target, fc, args.risk_z)
@@ -445,7 +455,7 @@ def main():
         import backtest
         metrics_df = backtest.run_all(clean, METHODS, args,
                                       materials_lookup=materials_for)
-        metrics_df.to_csv(config.METRICS_PATH, index=False)
+        plotting.safe_to_csv(metrics_df, config.METRICS_PATH, index=False)
         print(f"\n=== BACKTEST METRICS (test horizon = {args.backtest_horizon}"
               " weeks) ===")
         print(metrics_df.drop(columns=["key"]).round(2).to_string(index=False))
@@ -453,8 +463,8 @@ def main():
         # Accuracy-by-horizon profile for the best structural method.
         horizon_df = backtest.horizon_profile(
             clean, "ARIMA-GARCH", args, materials_lookup=materials_for)
-        horizon_df.to_csv(os.path.join(config.OUT_DIR, "horizon_accuracy.csv"),
-                          index=False)
+        plotting.safe_to_csv(horizon_df, os.path.join(
+            config.OUT_DIR, "horizon_accuracy.csv"), index=False)
         print("\n=== ACCURACY BY HORIZON — ARIMA-GARCH MAPE% (near-term is "
               "far more accurate) ===")
         print(horizon_df.drop(columns=["key"]).to_string(index=False))

@@ -74,7 +74,8 @@ def init_templates(keys: list[str]):
         if os.path.exists(path):
             log.info("[%s] template already exists: %s", k, path)
             continue
-        pd.DataFrame(columns=["date", "actual"]).to_csv(path, index=False)
+        plotting.safe_to_csv(pd.DataFrame(columns=["date", "actual"]), path,
+                             index=False)
         log.info("[%s] created template %s", k, path)
     print(f"\nEdit the CSVs in {REAL_DIR}/ (columns: date,actual) or use "
           f"`--add <product> <date> <value>`.")
@@ -129,8 +130,8 @@ def add_realization(key: str, date_str: str, value: float, clean):
     cur = load_realizations(key)
     cur.loc[date] = float(value)
     cur = cur.sort_index()
-    cur.rename("actual").to_frame().rename_axis("date").to_csv(
-        realization_path(key))
+    plotting.safe_to_csv(cur.rename("actual").to_frame().rename_axis("date"),
+                         realization_path(key))
     log.info("[%s] recorded %s = %.2f USD/Ton (%d realized points total)",
              key, date.date(), value, len(cur))
 
@@ -252,8 +253,9 @@ def main():
         os.makedirs(config.CLEAN_DIR, exist_ok=True)
         for k in keys:
             ext = extended_series(k, clean)
-            pd.concat([ext, clean[k].support.reindex(ext.index)], axis=1)\
-              .to_csv(os.path.join(config.CLEAN_DIR, f"{k}_extended.csv"))
+            plotting.safe_to_csv(
+                pd.concat([ext, clean[k].support.reindex(ext.index)], axis=1),
+                os.path.join(config.CLEAN_DIR, f"{k}_extended.csv"))
         log.info("Extended series written. Re-running run.py --use-extended ...")
         subprocess.run([sys.executable, "run.py", "--use-extended",
                         "--products", *keys], check=False)
@@ -280,7 +282,7 @@ def main():
     if all_rows:
         df = pd.DataFrame(all_rows)
         os.makedirs(config.OUT_DIR, exist_ok=True)
-        df.to_csv(TRACK_CSV, index=False)
+        plotting.safe_to_csv(df, TRACK_CSV, index=False)
         print("\n=== REALIZATION TRACKING (forecast vs actual) ===")
         print(df.drop(columns=["key"]).to_string(index=False))
         print("\nBest tracking method per product (lowest RMSE on realized):")
